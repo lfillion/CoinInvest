@@ -19,7 +19,10 @@ public class CCoinInfo
     private String    m_oName;
     private String    m_oSymbol;
     private double    m_dPrice;
+    private int       m_iRank;
     private Timestamp m_oTimestamp;
+    private String    m_oImageURL;
+    private String    m_oImageLocal;
 
     public CCoinInfo(String oRawData)
     {
@@ -28,6 +31,7 @@ public class CCoinInfo
             // Model: "id":"bitcoin","symbol":"btc","name":"Bitcoin",
             String oTimeStr = null;
             String oPrice   = null;
+            String oRank    = null;
             int    iStart   = oRawData.indexOf("name") + 7;
             int    iEnd     = (iStart < 0)? 0 : oRawData.indexOf('"', iStart);
 
@@ -40,8 +44,13 @@ public class CCoinInfo
             if ((iStart >= 0)&&(iStart < iEnd))
                 m_oSymbol = oRawData.substring(iStart, iEnd).toUpperCase();
 
-            // Model: 		"last_updated":"2021-03-14T15:39:31.591Z",
+            // Model: "market_cap_rank":1,
+            iStart  = oRawData.indexOf("market_cap_rank") + 17;
+            iEnd    = (iStart < 0)? 0 : oRawData.indexOf(',', iStart);
+            oRank   = oRawData.substring(iStart, iEnd);
+            m_iRank = Integer.parseInt(oRank);
 
+            // Model: 		"last_updated":"2021-03-14T15:39:31.591Z",
             iStart = oRawData.indexOf("last_updated") + 15;
             iEnd   = (iStart < 0)? 0 : oRawData.indexOf('"', iStart);
 
@@ -73,26 +82,22 @@ public class CCoinInfo
             oPrice   = oRawData.substring(iStart, iEnd);
             m_dPrice = Double.parseDouble(oPrice);
 
-            //iStart      = oRawData.indexOf("current_price");
-            //iStart      = GetOpenBrace(iStart, oRawData);
-            //oPrice      = oRawData.substring(iStart);
-            //iStart      = oPrice.indexOf("usd") + 5;
-            //iEnd        = (iStart < 0)? 0 : oPrice.indexOf(',', iStart);
-            //oPrice      = oPrice.substring(iStart, iEnd);
-            //m_dPriceUSD = Double.parseDouble(oPrice);
+            // Model: "image":"https://blabla.png?99999",
+            iStart      = oRawData.indexOf("image") + 8;
+            iEnd        = (iStart < 0)? 0 : oRawData.indexOf('?', iStart);
+            m_oImageURL = oRawData.substring(iStart, iEnd).replace("large", "small");
         }
     }
-    public String Name()
+    public String Name   () { return m_oName      ; }
+    public String Symbol () { return m_oSymbol    ; }
+    public double Price  () { return m_dPrice     ; }
+    public int    Rank   () { return m_iRank      ; }
+    public String ImgURL () { return m_oImageURL  ; }
+    public String ImgPath() { return m_oImageLocal; }
+
+    public void SetImgPath(String oPath)
     {
-        return m_oName;
-    }
-    public String Symbol()
-    {
-        return m_oSymbol;
-    }
-    public double Price()
-    {
-        return m_dPrice;
+        m_oImageLocal = oPath;
     }
     public String InfoString()
     {
@@ -102,6 +107,7 @@ public class CCoinInfo
     {
         return m_oTimestamp;
     }
+
     static int GetOpenBrace(int iStart, String oData)
     {
         return oData.indexOf('{', iStart);

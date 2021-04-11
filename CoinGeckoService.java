@@ -8,27 +8,38 @@ import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.sql.Timestamp;
 import java.util.ArrayList;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 public class CoinGeckoService extends Service
 {
-    private Looper               m_oServiceLooper     = null;
-    private ServiceHandler       m_oServiceHandler    = null;
-    private HandlerThread        m_oHandlerThread     = null;
-    private boolean              m_bExitFlag          = false;
-    private final int            m_iSnapshotPeriodSec = 300;
-    private String[]             m_aoPages            = null;
-    private ArrayList<CCoinInfo> m_oCoinSnapshotList  = null;
-    private final IBinder        m_oBinder            = new LocalBinder();
-    private String               m_oLogPath           = null;
+    private Looper                        m_oServiceLooper     = null;
+    private ServiceHandler                m_oServiceHandler    = null;
+    private HandlerThread                 m_oHandlerThread     = null;
+    private boolean                       m_bExitFlag          = false;
+    private int                           m_iSnapshotPeriodSec = 300;
+    private String[]                      m_aoPages            = null;
+    private ArrayList<CCoinInfo>          m_oCoinSnapshotList  = null;
+    private volatile ArrayList<CCoinItem> m_oCoinExportList    = null;
+    private Object                        m_oSyncExport        = null;
+    private final IBinder                 m_oBinder            = new LocalBinder();
+    private String                        m_oLogPath           = null;
+    private String                        m_oImgPath           = null;
 
     // Handler that receives messages from the thread
     private final class ServiceHandler extends Handler
@@ -44,6 +55,9 @@ public class CoinGeckoService extends Service
             // For our sample, we just sleep for 5 seconds.
             while (!m_bExitFlag)
             {
+                long lStartTimeMs   = System.currentTimeMillis();
+                long lElapsedTimeMs = 0L;
+
                 for (String oWebPage : m_aoPages)
                 {
                     if (!m_bExitFlag)
@@ -59,10 +73,12 @@ public class CoinGeckoService extends Service
                     }
                 }
 
+                DownloadImages();
+                RefreshExportable();
                 LogAllCoins();
+                NotifyAppActivity();
 
-                int iNbSec = m_iSnapshotPeriodSec;
-                while (!m_bExitFlag && (iNbSec-- > 0))
+                do
                 {
                     try
                     {
@@ -70,10 +86,12 @@ public class CoinGeckoService extends Service
                     }
                     catch (InterruptedException e)
                     {
-                    // Restore interrupt status.
+                        // Restore interrupt status.
                         Thread.currentThread().interrupt();
                     }
+                    lElapsedTimeMs = (System.currentTimeMillis() - lStartTimeMs);
                 }
+                while (!m_bExitFlag && (lElapsedTimeMs < (m_iSnapshotPeriodSec * 1000)));
             }
             // Stop the service using the startId, so that we don't stop
             // the service in the middle of handling another job
@@ -88,8 +106,10 @@ public class CoinGeckoService extends Service
         // separate thread because the service normally runs in the process's
         // main thread, which we don't want to block. We also make it
         // background priority so CPU-intensive work doesn't disrupt our UI.
-        m_oLogPath = getExternalFilesDir(null) + "/CoinDBase";
-        m_aoPages  = new String[iNbPage];
+        m_oLogPath    = getExternalFilesDir(null) + "/CoinDBase" ;
+        m_oImgPath    = getExternalFilesDir(null) + "/CoinImages";
+        m_aoPages     = new String[iNbPage];
+        m_oSyncExport = new Object();
 
         for (int iIdx = 0; iIdx < iNbPage; iIdx++)
         {
@@ -129,6 +149,13 @@ public class CoinGeckoService extends Service
     {
         m_bExitFlag = true;
         Toast.makeText(this, "CoinGeckoService done", Toast.LENGTH_SHORT).show();
+    }
+    private void NotifyAppActivity()
+    {
+        Intent intent = new Intent("Event.NewDataFromCoinGeckoService");
+        // You can also include some extra data.
+        intent.putExtra("ServiceMessage", "Notify.NewDataFromCoinGeckoService");
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
     private void GetCoinSnapshot(URL oURL) throws MalformedURLException, IOException
     {
@@ -170,6 +197,92 @@ public class CoinGeckoService extends Service
         }
         oReader.close();
     }
+    private void RefreshExportable()
+    {
+        synchronized (m_oSyncExport)
+        {
+            if (m_oCoinExportList == null)
+            {
+                m_oCoinExportList = new ArrayList<>();
+
+                for (CCoinInfo oInfo : m_oCoinSnapshotList)
+                {
+                    CCoinItem oItem  = new CCoinItem(oInfo.Name(), oInfo.Symbol(), oInfo.Rank(), oInfo.Price(), oInfo.TimeStamp(), oInfo.ImgPath());
+                    m_oCoinExportList.add(oItem);
+                }
+            }
+            else
+            {
+                for (CCoinInfo oInfo : m_oCoinSnapshotList)
+                {
+                    for (CCoinItem oItem : m_oCoinExportList)
+                    {
+                        if (oInfo.Symbol().equals(oItem.Symbol))
+                        {
+                            oItem.NewValue(oInfo.Price(), oInfo.TimeStamp());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    private void DownloadImages()
+    {
+        File oDir = new File(m_oImgPath);
+
+        if (!oDir.exists())
+        {
+            if (!oDir.mkdir())
+                return;
+        }
+        for (CCoinInfo oInfo : m_oCoinSnapshotList)
+        {
+            String oURL           = oInfo.ImgURL();
+            String oLocalFileneme = m_oImgPath + "/" + oInfo.Name() + ".png";
+
+            File oFile = new File(oLocalFileneme);
+
+            if (!oFile.exists())
+                DownloadFile(oURL, oLocalFileneme);
+
+            oInfo.SetImgPath(oLocalFileneme);
+        }
+    }
+    private boolean DownloadFile(String oURL, String oLocalPath)
+    {
+        boolean bSuccess = false;
+
+        try
+        {
+            InputStream     oInStream     = new URL(oURL).openStream();
+            DataInputStream oDataInStream = new DataInputStream(oInStream);
+
+            byte[] abyBuffer = new byte[1024];
+            int    iLength   = 0;
+
+            FileOutputStream oFileOutStream = new FileOutputStream(new File(oLocalPath));
+
+            while ((iLength = oDataInStream.read(abyBuffer)) > 0)
+            {
+                oFileOutStream.write(abyBuffer, 0, iLength);
+            }
+            bSuccess = true;
+        }
+        catch (MalformedURLException mue)
+        {
+            mue.printStackTrace();
+        }
+        catch (IOException ioe)
+        {
+            ioe.printStackTrace();
+        }
+        catch (SecurityException se)
+        {
+            se.printStackTrace();
+        }
+        return bSuccess;
+    }
     private void LogAllCoins()
     {
         if (m_oCoinSnapshotList != null)
@@ -199,32 +312,34 @@ public class CoinGeckoService extends Service
                     oBWriter.write(oLine);
                     oBWriter.close();
                 }
-                catch (IOException e){
+                catch (IOException e)
+                {
                     e.printStackTrace();
                 }
-
             }
             m_oCoinSnapshotList.clear();
         }
     }
-    public ArrayList<String> GetCoinList()
+    public ArrayList<CCoinItem> GetCoinList()
     {
-        ArrayList<String> oOut = new ArrayList<>();
-
-        File oDir = new File(m_oLogPath);
-
-        if (oDir.exists())
+        while (m_oCoinExportList == null)
         {
-            File[] aoFiles = oDir.listFiles();
-
-            for (File oFile : aoFiles)
+            try
             {
-                String oFilename = oFile.getName();
-                oOut.add(oFilename);
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                // Restore interrupt status.
+                Thread.currentThread().interrupt();
             }
         }
-
-        return oOut;
+        synchronized (m_oSyncExport)
+        {
+            return m_oCoinExportList;
+        }
+    }
+    public void SetRefreshPeriodSec(int iNbSec)
+    {
+        m_iSnapshotPeriodSec = iNbSec;
     }
     public class LocalBinder extends Binder
     {

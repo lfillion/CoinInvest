@@ -22,7 +22,13 @@ import androidx.navigation.fragment.NavHostFragment;
 public class FirstFragment extends Fragment {
     private ListView     mListView = null;
     public static String TAG       = "ListFragment";
+    private ArrayAdapter mArrayAdapter = null;
 
+    public FirstFragment(ArrayAdapter oAdapter)
+    {
+        super();
+        mArrayAdapter = oAdapter;
+    }
     @Override
     public View onCreateView(
             LayoutInflater inflater, ViewGroup container,
@@ -36,10 +42,18 @@ public class FirstFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
 
         mListView = (ListView) view.findViewById(R.id.id_ListView);
+        if (mArrayAdapter != null)
+            mListView.setAdapter(mArrayAdapter);
     }
     public void NewList(ArrayAdapter oAdapter)
     {
+        mArrayAdapter = oAdapter;
+
         mListView.setAdapter(null);
-        mListView.setAdapter(oAdapter);
+        mListView.setAdapter(mArrayAdapter);
+    }
+    public ListView GetListView()
+    {
+        return mListView;
     }
 }
