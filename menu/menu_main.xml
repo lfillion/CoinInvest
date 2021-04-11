@@ -11,12 +11,28 @@
         android:orderInCategory="101"
         android:title="Stop Service" />
     <item
-        android:id="@+id/action_List"
+        android:id="@+id/action_ResetAll"
         android:orderInCategory="102"
-        android:title="List" />
+        android:title="Reset All" />
+    <item
+        android:id="@+id/action_RefreshList"
+        android:orderInCategory="103"
+        android:title="Refresh" />
+    <item
+        android:id="@+id/action_SortByName"
+        android:orderInCategory="104"
+        android:title="Sort by Name" />
+    <item
+        android:id="@+id/action_SortByBestSwing"
+        android:orderInCategory="105"
+        android:title="Sort by Best Swing" />
+    <item
+        android:id="@+id/action_OriginalOrder"
+        android:orderInCategory="106"
+        android:title="Original Order" />
     <item
         android:id="@+id/action_settings"
-        android:orderInCategory="103"
+        android:orderInCategory="107"
         android:title="@string/action_settings"
         app:showAsAction="never" />
 </menu>
