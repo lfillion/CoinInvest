@@ -23,8 +23,9 @@ public class CCoinInfo
     private Timestamp m_oTimestamp;
     private String    m_oImageURL;
     private String    m_oImageLocal;
+    private boolean   m_bLocalTime;
 
-    public CCoinInfo(String oRawData)
+    public CCoinInfo(String oRawData, Timestamp oTimestamp)
     {
         if (oRawData != null)
         {
@@ -50,28 +51,38 @@ public class CCoinInfo
             oRank   = oRawData.substring(iStart, iEnd);
             m_iRank = Integer.parseInt(oRank);
 
-            // Model: 		"last_updated":"2021-03-14T15:39:31.591Z",
-            iStart = oRawData.indexOf("last_updated") + 15;
-            iEnd   = (iStart < 0)? 0 : oRawData.indexOf('"', iStart);
 
-            if ((iStart >= 0)&&(iStart < iEnd))
+            m_bLocalTime = (oTimestamp != null);
+
+            if (oTimestamp != null)
             {
-                oTimeStr = oRawData.substring(iStart, iEnd).toUpperCase();
+                m_oTimestamp = oTimestamp;
+            }
+            else
+            {
+                // Model: 		"last_updated":"2021-03-14T15:39:31.591Z",
+                iStart = oRawData.indexOf("last_updated") + 15;
+                iEnd   = (iStart < 0)? 0 : oRawData.indexOf('"', iStart);
 
-                if (oTimeStr != null)
+                if ((iStart >= 0)&&(iStart < iEnd))
                 {
-                    SimpleDateFormat oSDateFmt   = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-                    Date             oParsedDate = null;
-                    try
-                    {
-                        oParsedDate  = oSDateFmt.parse(oTimeStr);
-                        m_oTimestamp = new java.sql.Timestamp(oParsedDate.getTime());
+                    oTimeStr = oRawData.substring(iStart, iEnd).toUpperCase();
 
-                    }
-                    catch (ParseException e)
+                    if (oTimeStr != null)
                     {
-                        // TODO Auto-generated catch block
-                        e.printStackTrace();
+                        SimpleDateFormat oSDateFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+                        Date oParsedDate = null;
+                        try
+                        {
+                            oParsedDate  = oSDateFmt.parse(oTimeStr);
+                            m_oTimestamp = new java.sql.Timestamp(oParsedDate.getTime());
+
+                        }
+                        catch (ParseException e)
+                        {
+                            // TODO Auto-generated catch block
+                            e.printStackTrace();
+                        }
                     }
                 }
             }
@@ -88,12 +99,14 @@ public class CCoinInfo
             m_oImageURL = oRawData.substring(iStart, iEnd).replace("large", "small");
         }
     }
-    public String Name   () { return m_oName      ; }
-    public String Symbol () { return m_oSymbol    ; }
-    public double Price  () { return m_dPrice     ; }
-    public int    Rank   () { return m_iRank      ; }
-    public String ImgURL () { return m_oImageURL  ; }
-    public String ImgPath() { return m_oImageLocal; }
+    public String    Name        () { return m_oName      ; }
+    public String    Symbol      () { return m_oSymbol    ; }
+    public double    Price       () { return m_dPrice     ; }
+    public int       Rank        () { return m_iRank      ; }
+    public String    ImgURL      () { return m_oImageURL  ; }
+    public String    ImgPath     () { return m_oImageLocal; }
+    public Timestamp TimeStamp   () { return m_oTimestamp ; }
+    public boolean   IsLocalTime () { return m_bLocalTime ; }
 
     public void SetImgPath(String oPath)
     {
@@ -103,29 +116,33 @@ public class CCoinInfo
     {
         return String.join(",", Symbol(), TimeStamp().toString(), String.valueOf(Price()));
     }
-    public Timestamp TimeStamp()
-    {
-        return m_oTimestamp;
-    }
 
     static int GetOpenBrace(int iStart, String oData)
     {
-        return oData.indexOf('{', iStart);
+        return GetOpenBlock('{', iStart, oData);
+    }
+    static int GetOpenBlock(char cOpen, int iStart, String oData)
+    {
+        return oData.indexOf(cOpen, iStart);
     }
     static int MatchBrace(int iStartPos, String oData)
+    {
+        return MatchBlock('{', '}', iStartPos, oData);
+    }
+    static int MatchBlock(char cOpen, char cClose, int iStartPos, String oData)
     {
         int     iPos   = iStartPos;
         int     iDepth = 0;
         boolean bExit  = false;
 
-        if (oData.codePointAt(iPos) == '{')
+        if (oData.codePointAt(iPos) == cOpen)
         {
             do
             {
                 iPos++;
 
-                int iNextOpenBrace  = oData.indexOf('{', iPos);
-                int iNextCloseBrace = oData.indexOf('}', iPos);
+                int iNextOpenBrace  = oData.indexOf(cOpen , iPos);
+                int iNextCloseBrace = oData.indexOf(cClose, iPos);
 
                 if (iNextCloseBrace < 0)
                 {
@@ -152,7 +169,7 @@ public class CCoinInfo
             }
             while (!bExit);
         }
-        else if (oData.codePointAt(iPos) == '}')
+        else if (oData.codePointAt(iPos) == cClose)
         {
 
         }

@@ -37,17 +37,16 @@ import java.util.ArrayList;
 import java.util.Comparator;
 
 public class MainActivity extends AppCompatActivity implements IHostActivityOptions {
-    private Intent               mServiceIntent   = null;
-    private CoinGeckoService     mService         = null;
-    private boolean              mBound           = false;
-    private ArrayList<CCoinItem> mCoinList        = null;
-    private FirstFragment        mListFragment    = null;
-    private SecondFragment       mGraphFragment   = null;
-    private CCoinItemAdapter     mCoinItemAdapter = null;
-    private int                  miCurrentFragment = -1;
-    private FragmentManager      mFragmentManager  = null;
-    private BroadcastReceiver    mMessageReceiver  = null;
-
+    private Intent               mServiceIntent     = null;
+    private CoinGeckoService     mService           = null;
+    private boolean              mBound             = false;
+    private ArrayList<CCoinItem> mCoinList          = null;
+    private FirstFragment        mListFragment      = null;
+    private SecondFragment       mGraphFragment     = null;
+    private CCoinItemAdapter     mCoinItemAdapter   = null;
+    private int                  miCurrentFragment  = -1;
+    private FragmentManager      mFragmentManager   = null;
+    private BroadcastReceiver    mMessageReceiver   = null;
     //private ArrayList<String> mCoinList        = null;
  //   private ListView          mListView        = null;
     @Override
@@ -111,11 +110,12 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
+    public boolean onOptionsItemSelected(MenuItem oMenuItem)
+    {
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
+        int id = oMenuItem.getItemId();
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings)
@@ -148,6 +148,10 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
         else if (id == R.id.action_ResetAll)
         {
 
+        }
+        else if (id == R.id.action_TestNotification)
+        {
+            mService.TestNotification();
         }
         else if (id == R.id.action_RefreshList)
         {
@@ -186,15 +190,40 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
                 });
             }
         }
+        else if (id == R.id.action_SortByBestPerformance)
+        {
+            if ((mCoinItemAdapter != null) && (mCoinItemAdapter.getCount() > 1))
+            {
+                mCoinItemAdapter.sort(new Comparator<CCoinItem>() {
+                    @Override
+                    public int compare(CCoinItem oLeft, CCoinItem oRight)
+                    {
+                        int iLeftPerform  = (int)(oLeft.GetStats().Performance * 1000.0);
+                        int iRightPerform = (int)(oRight.GetStats().Performance * 1000.0);
+
+                        return iRightPerform - iLeftPerform;
+                    }
+                });
+            }
+        }
         else if (id == R.id.action_SortByBestSwing)
         {
             if ((mCoinItemAdapter != null) && (mCoinItemAdapter.getCount() > 1))
             {
+                mCoinItemAdapter.sort(new Comparator<CCoinItem>() {
+                    @Override
+                    public int compare(CCoinItem oLeft, CCoinItem oRight)
+                    {
+                        int iLeftSwing  = (int)(oLeft.GetStats().SwingIndicator  * 1000.0);
+                        int iRightSwing = (int)(oRight.GetStats().SwingIndicator * 1000.0);
 
+                        return iRightSwing - iLeftSwing;
+                    }
+                });
             }
         }
 
-        return super.onOptionsItemSelected(item);
+        return super.onOptionsItemSelected(oMenuItem);
     }
 
     private CCoinItemAdapter CreateAdapter(ArrayList<CCoinItem> oInList)
