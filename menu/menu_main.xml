@@ -23,16 +23,25 @@
         android:orderInCategory="104"
         android:title="Sort by Name" />
     <item
-        android:id="@+id/action_SortByBestSwing"
+        android:id="@+id/action_SortByBestPerformance"
         android:orderInCategory="105"
+        android:title="Sort by Best Performance" />
+    <item
+        android:id="@+id/action_SortByBestSwing"
+        android:orderInCategory="106"
         android:title="Sort by Best Swing" />
     <item
         android:id="@+id/action_OriginalOrder"
-        android:orderInCategory="106"
+        android:checked="true"
+        android:orderInCategory="107"
         android:title="Original Order" />
     <item
+        android:id="@+id/action_TestNotification"
+        android:orderInCategory="108"
+        android:title="Test Notification" />
+    <item
         android:id="@+id/action_settings"
-        android:orderInCategory="107"
+        android:orderInCategory="109"
         android:title="@string/action_settings"
         app:showAsAction="never" />
 </menu>
