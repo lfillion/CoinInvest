@@ -8,78 +8,199 @@
     android:tag="TAG_SecondFragment"
     tools:context=".SecondFragment">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        tools:layout_editor_absoluteX="159dp"
-        tools:layout_editor_absoluteY="198dp">
-        <Button
-            android:id="@+id/id_BackViewButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Back"
-            tools:layout_editor_absoluteX="136dp"
-            tools:layout_editor_absoluteY="570dp" />
-
+    <ScrollView
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent">
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal" >
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            tools:layout_editor_absoluteX="159dp"
+            tools:layout_editor_absoluteY="198dp">
+
+            <Button
+                android:id="@+id/id_BackViewButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Back"
+                tools:layout_editor_absoluteX="136dp"
+                tools:layout_editor_absoluteY="570dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/id_2ndLogo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:minWidth="50dp"
+                    android:minHeight="50dp"
+                    android:scaleType="fitEnd"
+                    app:srcCompat="@android:drawable/btn_star_big_off" />
+
+                <TextView
+                    android:id="@+id/id_2ndCoinRank"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:width="40dp"
+                    android:text="Rank"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/id_2ndCoinSymbol"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:width="60dp"
+                    android:text="Symbol"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/id_2ndCoinName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:width="150dp"
+                    android:text="Name"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/id_2ndCoinValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:width="120dp"
+                    android:text="Value"
+                    android:textSize="18sp" />
+            </LinearLayout>
 
             <ImageView
-                android:id="@+id/id_2ndLogo"
+                android:id="@+id/id_ImageView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minWidth="200dp"
+                android:minHeight="400dp"
+                android:visibility="visible"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                tools:layout_editor_absoluteY="47dp"
+                tools:visibility="visible" />
+
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="0"
-                android:minWidth="50dp"
-                android:minHeight="50dp"
-                android:scaleType="fitEnd"
-                app:srcCompat="@android:drawable/btn_star_big_off" />
+                android:orientation="horizontal">
+
+                <Switch
+                    android:id="@+id/id_PriceAlertSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Enable Price Alert"
+                    android:textSize="18sp" />
+
+                <EditText
+                    android:id="@+id/id_AlertTriggerPercent"
+                    android:layout_width="78dp"
+                    android:layout_height="wrap_content"
+                    android:ems="10"
+                    android:enabled="false"
+                    android:inputType="numberDecimal|numberSigned"
+                    android:maxWidth="10dp" />
+
+                <TextView
+                    android:id="@+id/textView3"
+                    android:layout_width="30dp"
+                    android:layout_height="wrap_content"
+                    android:text="%" />
+
+                <Button
+                    android:id="@+id/id_AcceptButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:enabled="false"
+                    android:text="Accept" />
+            </LinearLayout>
 
             <TextView
-                android:id="@+id/id_2ndCoinRank"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:width="40dp"
-                android:text="Rank"
-                android:textSize="18sp" />
+                android:layout_gravity="center"
+                android:text="Analysis Data"
+                android:textSize="22sp" />
 
-            <TextView
-                android:id="@+id/id_2ndCoinSymbol"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:width="60dp"
-                android:text="Symbol"
-                android:textSize="18sp" />
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/id_2ndCoinName"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:width="150dp"
-                android:text="Name"
-                android:textSize="18sp" />
+                <TextView
+                    android:id="@+id/id_Growth"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.5"
+                    android:text="Growth"
+                    android:textSize="18sp" />
+                <TextView
+                    android:id="@+id/id_GrowthValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.5"
+                    android:text="0"
+                    android:textSize="18sp" />
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/id_2ndCoinValue"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:width="120dp"
-                android:text="Value"
-                android:textSize="18sp" />
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/id_Performance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.5"
+                    android:text="Performance"
+                    android:textSize="18sp" />
+                <TextView
+                    android:id="@+id/id_PerformanceValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.5"
+                    android:text="0.0"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/id_Swing"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.5"
+                    android:text="Swing Indice"
+                    android:textSize="18sp" />
+                <TextView
+                    android:id="@+id/id_SwingValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.5"
+                    android:text="0.0"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/id_AnalysisImageView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minWidth="200dp"
+                android:minHeight="400dp"
+                android:visibility="visible"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                tools:layout_editor_absoluteY="47dp"
+                tools:visibility="visible" />
         </LinearLayout>
-
-        <ImageView
-            android:id="@+id/id_ImageView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minWidth="200dp"
-            android:minHeight="400dp"
-            android:visibility="visible"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            tools:layout_editor_absoluteY="47dp"
-            tools:visibility="visible" />
-    </LinearLayout>
+    </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
