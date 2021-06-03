@@ -7,8 +7,11 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.graphics.BitmapFactory;
+import android.os.Build;
 import android.os.Bundle;
 
+import androidx.annotation.RequiresApi;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.fragment.app.FragmentFactory;
@@ -30,11 +33,23 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import androidx.work.Data;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
+import androidx.work.WorkRequest;
+import androidx.work.Worker;
+import androidx.work.WorkerParameters;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity implements IHostActivityOptions {
     private Intent               mServiceIntent     = null;
@@ -47,6 +62,8 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
     private int                  miCurrentFragment  = -1;
     private FragmentManager      mFragmentManager   = null;
     private BroadcastReceiver    mMessageReceiver   = null;
+    private UUID                 miWorkerID         = UUID.fromString("00000000-0000-0000-0000-000000000000");
+    private boolean              mbDebugVal         = false;
     //private ArrayList<String> mCoinList        = null;
  //   private ListView          mListView        = null;
     @Override
@@ -95,6 +112,76 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
         LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, new IntentFilter("Event.NewDataFromCoinGeckoService"));
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void TestFgndService()
+    {
+        if (mbDebugVal)
+        {
+            stopService(new Intent(this,TestFgndService.class));
+            mbDebugVal = false;
+        }
+        else
+        {
+            startService(new Intent(getApplicationContext(),TestFgndService.class));
+            mbDebugVal = true;
+        }
+    }
+    private void TestWorkManager()
+    {
+//        WorkRequest oMyWorkerReq = new OneTimeWorkRequest.Builder(MyWorker.class).build();
+//        WorkRequest oMyWorkerReq = OneTimeWorkRequest.from(MyWorker.class);
+        String      oFilePath  = getExternalFilesDir(null).toString();
+        Data        oInputData = new Data.Builder().putString("FilePath", oFilePath).build();
+        WorkManager oWorkM     = WorkManager.getInstance(getApplicationContext());
+        String      oFilename  = oFilePath + "/" + "CoinGeckoWorkerTest.log";
+        File        oFile     = new File(oFilename);
+
+        if (oFile.exists())
+        {
+            try
+            {
+                FileReader        oFReader   = new FileReader(oFile.getAbsoluteFile());
+                BufferedReader    oBReader   = new BufferedReader(oFReader);
+                String            oLine      = null;
+                ArrayList<String> oAllLines  = new ArrayList<>();
+
+                while ((oLine = oBReader.readLine()) != null)
+                    oAllLines.add(oLine);
+
+                oWorkM.cancelWorkById(miWorkerID);
+                oFile.delete();
+
+                int                 iNbLines  = oAllLines.size();
+                AlertDialog.Builder oDlgAlert = new AlertDialog.Builder(this);
+                String              oToShow   = "Backgnd Worker hit " + iNbLines + "times\r\n";
+
+                if (iNbLines < 5)
+                    oToShow += String.join("\r\n", oAllLines);
+                else
+                {
+                    oToShow += String.join("\r\n", oAllLines.get(0), oAllLines.get(1), "...", oAllLines.get(iNbLines -2), oAllLines.get(iNbLines - 1));
+                }
+                oDlgAlert.setMessage(oToShow);
+                oDlgAlert.setTitle("Background Worker Status");
+                oDlgAlert.setPositiveButton("OK", null);
+                oDlgAlert.setCancelable(true);
+                oDlgAlert.create().show();
+            }
+            catch (Exception oIgnore)
+            {
+            }
+        }
+        else
+        {
+            //PeriodicWorkRequest oMyWorkerReq = new PeriodicWorkRequest.Builder(CoinGeckoWorker.class, 15, TimeUnit.MINUTES).setInputData(oInputData).build();
+            //miWorkerID = oMyWorkerReq.getId();
+            //oWorkM.enqueue(oMyWorkerReq);
+            PeriodicWorkRequest.Builder oPeriodicBuilder = new PeriodicWorkRequest.Builder(CoinGeckoWorker.class, 15, TimeUnit.MINUTES);
+            PeriodicWorkRequest         oMyWorkerReq     = oPeriodicBuilder.build();
+            miWorkerID = oMyWorkerReq.getId();
+            oWorkM.enqueueUniquePeriodicWork("CoinGeckoWorker",  ExistingPeriodicWorkPolicy.KEEP, oMyWorkerReq);
+        }
+    }
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
@@ -120,6 +207,8 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings)
         {
+            // TestWorkManager();
+            TestFgndService();
             return true;
         }
         else if (id == R.id.action_StartService)
@@ -234,13 +323,11 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
     }
     private void SwitchView(int iID)
     {
-        if (iID != miCurrentFragment)
-        {
-            if (iID == R.id.id_ListFragment)
-                mFragmentManager.beginTransaction().replace(R.id.fragment_container_view, mListFragment).setReorderingAllowed(true).addToBackStack(null).commit();
-            else if (iID == R.id.id_GraphFragment)
-                mFragmentManager.beginTransaction().replace(R.id.fragment_container_view, mGraphFragment).setReorderingAllowed(true).addToBackStack(null).commit();
-        }
+        if (iID == R.id.id_ListFragment)
+            mFragmentManager.beginTransaction().replace(R.id.fragment_container_view, mListFragment).setReorderingAllowed(true).addToBackStack(null).commit();
+        else if (iID == R.id.id_GraphFragment)
+            mFragmentManager.beginTransaction().replace(R.id.fragment_container_view, mGraphFragment).setReorderingAllowed(true).addToBackStack(null).commit();
+
         miCurrentFragment = iID;
     }
     public void BackButtonClick()

@@ -1,13 +1,25 @@
 package com.example.coininverst;
 
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.os.*;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.os.Binder;
+import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.Message;
+import android.os.PowerManager;
 import android.os.Process;
 import android.widget.Toast;
 
@@ -22,11 +34,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
-import java.net.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
+import java.net.URL;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 
@@ -39,6 +47,7 @@ public class CoinGeckoService extends Service
     private ServiceHandler                m_oServiceHandler    = null;
     private HandlerThread                 m_oHandlerThread     = null;
     private boolean                       m_bExitFlag          = false;
+    private boolean                       m_bExitEcho          = false;
     private int                           m_iSnapshotPeriodSec = 300;
     private String[]                      m_aoPages            = null;
     private ArrayList<CCoinInfo>          m_oCoinSnapshotList  = null;
@@ -49,6 +58,12 @@ public class CoinGeckoService extends Service
     private String                        m_oImgPath           = null;
     private Intent                        m_oIntent            = null;
     private ArrayList<String>             m_oNotifChannels     = null;
+    private Thread                        m_oStillRunningProc  = null;
+    private Message                       m_oHandleMessage     = null;
+    private Context                       m_oContext           = null;
+    private PowerManager.WakeLock         m_oWakeLock          = null;
+    private PowerManager                  m_oPowerManager      = null;
+    private static int                    FOREGROUND_ID        = 1338;
 
     // Handler that receives messages from the thread
     private final class ServiceHandler extends Handler
@@ -60,50 +75,100 @@ public class CoinGeckoService extends Service
         @Override
         public void handleMessage(Message msg)
         {
-            while (!m_bExitFlag)
+            m_oHandleMessage = msg;
+
+            m_oStillRunningProc = new Thread()
             {
-                long lStartTimeMs   = System.currentTimeMillis();
-                long lElapsedTimeMs = 0L;
-
-                for (String oWebPage : m_aoPages)
+                public void run()
                 {
-                    if (!m_bExitFlag)
-                    {
-                        try
-                        {
-                            GetCoinSnapshot(new URL(oWebPage));
-                        }
-                        catch (IOException e)
-                        {
-                            e.printStackTrace();
-                        }
-                    }
+                    InfiniteProcees();
                 }
+            };
+            m_oStillRunningProc.start();
+        }
+    }
+    private void InfiniteProcees()
+    {
+        while (!m_bExitFlag)
+        {
+            long lStartTimeMs         = System.currentTimeMillis();
+            long lElapsedTimeMs       = 0L;
+            long lWakeLockTimeoutMSec = 10 * 60 * 1000L;
 
-                DownloadImages();
-                RefreshExportable();
-                LogAllCoins();
-                NotifyAppActivity();
+           // AcquireWakeLock();
 
-                do
+            for (String oWebPage : m_aoPages)
+            {
+                if (!m_bExitFlag)
                 {
                     try
                     {
-                        Thread.sleep(1000);
+                        GetCoinSnapshot(new URL(oWebPage));
                     }
-                    catch (InterruptedException e)
+                    catch (IOException e)
                     {
-                        // Restore interrupt status.
-                        Thread.currentThread().interrupt();
+                        e.printStackTrace();
                     }
-                    lElapsedTimeMs = (System.currentTimeMillis() - lStartTimeMs);
                 }
-                while (!m_bExitFlag && (lElapsedTimeMs < (m_iSnapshotPeriodSec * 1000)));
             }
-            // Stop the service using the startId, so that we don't stop
-            // the service in the middle of handling another job
-            stopSelf(msg.arg1);
+
+            DownloadImages();
+            RefreshExportable();
+            LogAllCoins();
+            NotifyAppActivity();
+
+            // ReleaseWakelock();
+
+            lElapsedTimeMs = (System.currentTimeMillis() - lStartTimeMs);
+
+            if ((m_iSnapshotPeriodSec * 1000) > (int)lElapsedTimeMs)
+                SleepMSec((m_iSnapshotPeriodSec * 1000) - (int)lElapsedTimeMs);
+            //do
+            //{
+            //    SleepMSec(1000);
+            //    lElapsedTimeMs = (System.currentTimeMillis() - lStartTimeMs);
+            //}
+            //while (!m_bExitFlag && (lElapsedTimeMs < (m_iSnapshotPeriodSec * 1000)));
         }
+
+        // Stop the service using the startId, so that we don't stop
+        // the service in the middle of handling another job
+        stopSelf(m_oHandleMessage.arg1);
+
+        m_bExitEcho = m_bExitFlag;
+    }
+    private boolean SleepMSec(int iMSec)
+    {
+        boolean bSuccess = false;
+        try
+        {
+            Thread.sleep(iMSec);
+            bSuccess = false;
+        }
+        catch (Exception oEx)
+        {
+            // Restore interrupt status.
+            Thread.currentThread().interrupt();
+        }
+        return bSuccess;
+    }
+    public void AcquireWakeLock()
+    {
+        if (Globals.wakelock != null)
+        {
+            Globals.wakelock.release();
+            Globals.wakelock = null;
+        }
+        m_oPowerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        m_oWakeLock     =  m_oPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"CoinGeckoService:WakeLock");
+
+        m_oWakeLock.acquire();
+
+        Globals.wakelock = this.m_oWakeLock;
+    }
+    public void ReleaseWakelock()
+    {
+        m_oWakeLock.release();
     }
     @Override
     public void onCreate()
@@ -113,12 +178,16 @@ public class CoinGeckoService extends Service
         // separate thread because the service normally runs in the process's
         // main thread, which we don't want to block. We also make it
         // background priority so CPU-intensive work doesn't disrupt our UI.
-        m_oLogPath    = getExternalFilesDir(null) + "/CoinDBase" ;
-        m_oImgPath    = getExternalFilesDir(null) + "/CoinImages";
-        m_aoPages     = new String[iNbPage];
-        m_oSyncExport = new Object();
+        m_oLogPath      = getExternalFilesDir(null) + "/CoinDBase" ;
+        m_oImgPath      = getExternalFilesDir(null) + "/CoinImages";
+        m_aoPages       = new String[iNbPage];
+        m_oSyncExport   = new Object();
+        m_oContext      = this;
 
-        CreateNotificationChannel("ALERT_CHANNEL", "CoinGeckoService Alert Channel", NotificationManager.IMPORTANCE_HIGH);
+        CreateNotificationChannel("FGNDSERVICE_CHANNEL", "CoinGeckoService Foreground Channel", NotificationManager.IMPORTANCE_DEFAULT);
+        CreateNotificationChannel("ALERT_CHANNEL"      , "CoinGeckoService Alert Channel"     , NotificationManager.IMPORTANCE_HIGH);
+
+        startForeground(FOREGROUND_ID, GetForgroundNotification());
 
         for (int iIdx = 0; iIdx < iNbPage; iIdx++)
         {
@@ -130,12 +199,58 @@ public class CoinGeckoService extends Service
         // Get the HandlerThread's Looper and use it for our Handler
         m_oServiceLooper  = m_oHandlerThread.getLooper();
         m_oServiceHandler = new ServiceHandler(m_oServiceLooper);
+
+        Toast.makeText(this, "CoinGeckoService starting", Toast.LENGTH_SHORT).show();
     }
 
+    private Notification GetForgroundNotification()
+    {
+        String oChannelToUse = "No_ID";
+
+        if ((m_oNotifChannels != null)&&(m_oNotifChannels.size() > 0))
+        {
+            for (String oChannelID : m_oNotifChannels)
+            {
+                if (oChannelID.contains("FGNDSERVICE"))
+                {
+                    oChannelToUse = oChannelID;
+                    break;
+                }
+            }
+        }
+
+        Bitmap                     oIcon  = BitmapFactory.decodeResource(getBaseContext().getResources(), android.R.drawable.star_on);
+        NotificationCompat.Builder oBuild = new NotificationCompat.Builder(this, oChannelToUse);
+
+        oBuild.setContentTitle("CoinGeckoService")
+                .setTicker("CoinGeckoService Ticker")
+                .setSmallIcon(android.R.drawable.star_on)
+                .setLargeIcon(Bitmap.createScaledBitmap(oIcon, 128, 128, false))
+                .setOngoing(true);
+
+        return oBuild.build();
+    }
+    //private Notification GetForgroundNotification()
+    //{
+    //    Intent               oNotifIntent   = new Intent(this, MainActivity.class);
+    //    PendingIntent        oPendingIntent = PendingIntent.getActivity(this, 0, oNotifIntent, 0);
+    //    Bitmap               oIcon          = BitmapFactory.decodeResource(getBaseContext().getResources(), android.R.drawable.star_on);
+    //    Notification.Builder oBuild         = new Notification.Builder(this);
+//
+    //    oBuild.setContentTitle("CoinGeckoService Title")
+    //            .setTicker("CoinGeckoService Ticker")
+    //            .setSmallIcon(android.R.drawable.star_on)
+    //            .setLargeIcon(Bitmap.createScaledBitmap(oIcon, 128, 128, false))
+    //            .setContentIntent(oPendingIntent)
+    //            .setPriority(Notification.PRIORITY_LOW)
+    //            .setOngoing(true);
+//
+    //    return oBuild.build();
+    //}
     @Override
     public int onStartCommand(Intent intent, int flags, int startId)
     {
-        Toast.makeText(this, "CoinGeckoService starting", Toast.LENGTH_SHORT).show();
+        boolean  bForeGnd  = false;
 
         m_oIntent = intent;
 
@@ -152,14 +267,47 @@ public class CoinGeckoService extends Service
     @Override
     public IBinder onBind(Intent intent)
     {
+        //stopForeground(true);
+
         return m_oBinder;
     }
+
+    //@Override
+    //public void onRebind(Intent intent)
+    //{
+    //    super.onRebind(intent);
+//
+    //    stopForeground(true);
+    //}
+
+    //@Override
+    //public boolean onUnbind(Intent intent)
+    //{
+    //    startForeground(FOREGROUND_ID, GetForgroundNotification());
+//
+    //    return super.onUnbind(intent);
+    //}
 
     @Override
     public void onDestroy()
     {
+        super.onDestroy();
+
         m_bExitFlag = true;
-        Toast.makeText(this, "CoinGeckoService done", Toast.LENGTH_SHORT).show();
+
+        stopForeground(true);
+
+        int iTimeoutMsec = 2000;
+        while (!m_bExitEcho && (iTimeoutMsec > 0) && SleepMSec(100))
+        {
+            iTimeoutMsec -= 100;
+        }
+        //Toast.makeText(this, "CoinGeckoService done", Toast.LENGTH_SHORT).show();
+
+        Intent oBroadcastIntent = new Intent();
+        oBroadcastIntent.setAction("RestartService");
+        oBroadcastIntent.setClass(this, ServiceRestarter.class);
+        this.sendBroadcast(oBroadcastIntent);
     }
     private void NotifyAppActivity()
     {

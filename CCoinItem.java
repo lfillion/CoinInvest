@@ -253,6 +253,7 @@ public class CCoinItem
         }
         private void ResetBasicStats()
         {
+            //TestFormatStat();
             TopValue       = Integer.MIN_VALUE;
             BotValue       = Integer.MAX_VALUE;
             Average        = -1.0;
@@ -261,6 +262,21 @@ public class CCoinItem
             NbSamples      = 0;
             m_lPeriodStart = 0;
             m_lPeriodEnd   = 0;
+        }
+        private void TestFormatStat()
+        {
+            Date oDate = new Date();
+            m_lPeriodEnd   = oDate.getTime();
+            m_lPeriodStart = m_lPeriodEnd - (3600 * 1000);
+            TopValue       = 10.0;
+            BotValue       =  5.5;
+            Average        =  7.7;
+            StdDeviation   =  2.3;
+            PeriodMSec     = m_lPeriodEnd - m_lPeriodStart;
+            NbSamples      = 72;
+
+            String oTest = FormatStat();
+            boolean bLogStat = NextPeriod(oTest);
         }
         private String FormatTime(long lTime)
         {
@@ -286,14 +302,15 @@ public class CCoinItem
 
             if (oLastPeriod.contains("End:"))
             {
-                SimpleDateFormat oFormat = new SimpleDateFormat(DateTimeFormat);
-                int    iExtractStart = oLastPeriod.indexOf("End:") + 5;
-                int    iExtractEnd   = oLastPeriod.indexOf(",", iExtractStart);
-                String oEndPeriod    = oLastPeriod.substring(iExtractStart, iExtractEnd);
+                SimpleDateFormat oFormat       = new SimpleDateFormat(DateTimeFormat);
+                int              iExtractStart = oLastPeriod.indexOf("End:") + 4;
+                int              iExtractEnd   = oLastPeriod.indexOf(",", iExtractStart);
+                String           oEndPeriod    = oLastPeriod.substring(iExtractStart, iExtractEnd);
 
                 try
                 {
-                    Date oEnd = oFormat.parse(oEndPeriod);
+                    Date oEnd     = oFormat.parse(oEndPeriod);
+                    long lEndMSec = oEnd.getTime();
 
                     if (m_lPeriodStart > oEnd.getTime())
                         bAnswer = true;
