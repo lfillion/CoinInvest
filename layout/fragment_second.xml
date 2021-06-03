@@ -93,15 +93,17 @@
 
                 <Switch
                     android:id="@+id/id_PriceAlertSwitch"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="45"
                     android:text="Enable Price Alert"
                     android:textSize="18sp" />
 
                 <EditText
                     android:id="@+id/id_AlertTriggerPercent"
-                    android:layout_width="78dp"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="20"
                     android:ems="10"
                     android:enabled="false"
                     android:inputType="numberDecimal|numberSigned"
@@ -109,15 +111,16 @@
 
                 <TextView
                     android:id="@+id/textView3"
-                    android:layout_width="30dp"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="10"
                     android:text="%" />
 
                 <Button
                     android:id="@+id/id_AcceptButton"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
+                    android:layout_weight="25"
                     android:enabled="false"
                     android:text="Accept" />
             </LinearLayout>
