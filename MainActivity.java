@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 
@@ -43,9 +44,11 @@ import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.UUID;
@@ -64,6 +67,10 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
     private BroadcastReceiver    mMessageReceiver   = null;
     private UUID                 miWorkerID         = UUID.fromString("00000000-0000-0000-0000-000000000000");
     private boolean              mbDebugVal         = false;
+    private String               mConfigPath        = null;
+    private String               mConfigFilename    = "CoinInvest.Config.ini";
+    private Object               mSaveConfigSync    = null;
+
     //private ArrayList<String> mCoinList        = null;
  //   private ListView          mListView        = null;
     @Override
@@ -72,6 +79,9 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        mConfigPath     = getExternalFilesDir(null) + "/CoinConfig";
+        mSaveConfigSync = new Object();
 
         mServiceIntent = new Intent(this, CoinGeckoService.class);
         startService(mServiceIntent);
@@ -101,6 +111,9 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
                     boolean bFirstList = mCoinItemAdapter == null;
 
                     mCoinList = mService.GetCoinList();
+
+                    RestoreCoinConfig();
+
                     //mListView.setAdapter(CreateAdapter(mCoinList));
                     if (bFirstList)
                         mListFragment.NewList(CreateAdapter(mCoinList));
@@ -208,7 +221,7 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
         if (id == R.id.action_settings)
         {
             // TestWorkManager();
-            TestFgndService();
+            // TestFgndService();
             return true;
         }
         else if (id == R.id.action_StartService)
@@ -311,6 +324,10 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
                 });
             }
         }
+        else if (id == R.id.action_ToggleView)
+        {
+            mListFragment.ToggleView();
+        }
 
         return super.onOptionsItemSelected(oMenuItem);
     }
@@ -330,10 +347,129 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
 
         miCurrentFragment = iID;
     }
+    // IHostActivityOptions interface
     public void BackButtonClick()
     {
         SwitchView(R.id.id_ListFragment);
     }
+
+    public void SaveCoinConfig(CCoinItem oCoin)
+    {
+        synchronized (mSaveConfigSync)
+        {
+            try
+            {
+                File              oDir     = new File(mConfigPath);
+                File              oFile    = new File(mConfigPath + "/" + mConfigFilename);
+                FileWriter        oFWriter = null;
+                BufferedWriter    oBWriter = null;
+                ArrayList<String> oLines   = new ArrayList<>();
+
+                if (!oDir.exists())
+                {
+                    oDir.mkdir();
+                }
+                if (!oFile.exists())
+                {
+                    oFile.createNewFile();
+                }
+                else
+                {
+                    FileReader     oFReader = new FileReader(oFile.getAbsoluteFile());
+                    BufferedReader oBReader = new BufferedReader(oFReader);
+                    String         oLine    = null;
+
+                    while ((oLine = oBReader.readLine()) != null)
+                    {
+                        if (!oLine.contains(oCoin.Name))
+                            oLines.add(oLine);
+                    }
+                    oBReader.close();
+                    oFReader.close();
+                }
+                oFWriter = new FileWriter(oFile.getAbsoluteFile(), false);
+                oBWriter = new BufferedWriter(oFWriter);
+
+                for (String oToWrite : oLines)
+                {
+                    oBWriter.write(oToWrite + "\r\n");
+                }
+                if (oCoin.AlertEnabled)
+                {
+                    oBWriter.write(oCoin.AlertToString() + "\r\n");
+                }
+                if (oCoin.Favorite)
+                {
+                    oBWriter.write(oCoin.FavoriteToString() + "\r\n");
+                }
+                oBWriter.close();
+                oFWriter.close();
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        }
+    }
+    // End IHostActivityOptions interface
+    private void RestoreCoinConfig()
+    {
+        ArrayList<CCoinItem> oNewConfigList = new ArrayList<>();
+
+        synchronized (mSaveConfigSync)
+        {
+            try
+            {
+                File oDir  = new File(mConfigPath);
+                File oFile = new File(mConfigPath + "/" + mConfigFilename);
+
+                if (oDir.exists() && oFile.exists())
+                {
+                    FileReader     oFReader = new FileReader(oFile.getAbsoluteFile());
+                    BufferedReader oBReader = new BufferedReader(oFReader);
+                    String         oLine    = null;
+
+                    while ((oLine = oBReader.readLine()) != null)
+                    {
+                        if (oLine.contains("Alert"))
+                        {
+                            for (CCoinItem oItem : mCoinList)
+                            {
+                                if (oLine.contains(oItem.Name))
+                                {
+                                    if (oItem.EvaluateAlert(oLine))
+                                        oItem.SetAlert(oLine);
+                                    else
+                                        oNewConfigList.add(oItem);
+                                    break;
+                                }
+                            }
+                        }
+                        else if (oLine.contains("Favorite"))
+                        {
+                            for (CCoinItem oItem : mCoinList)
+                            {
+                                if (oLine.contains(oItem.Name))
+                                {
+                                    oItem.SetFavorite(oLine);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    oBReader.close();
+                    oFReader.close();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        for (CCoinItem oItem : oNewConfigList)
+        {
+            SaveCoinConfig(oItem);
+        }
+    }
+
     /** Defines callbacks for service binding, passed to bindService() */
     private ServiceConnection Connection = new ServiceConnection()
     {
@@ -381,6 +517,9 @@ public class MainActivity extends AppCompatActivity implements IHostActivityOpti
             // Populate the data into the template view using the data object
             //oLogo.setImageBitmap(((BitmapDrawable)oItem.Logo.getDrawable()).getBitmap());
             oName.setText (oItem.Name);
+            oName.setBackgroundColor(Color.WHITE);
+            if (oItem.Favorite)
+                oName.setBackgroundColor(Color.YELLOW);
             oSymb.setText (oItem.Symbol);
             oRank.setText (oItem.Rank);
             oValue.setText(oItem.Value);

@@ -16,14 +16,15 @@ import java.text.ParseException;
 
 public class CCoinInfo
 {
-    private String    m_oName;
-    private String    m_oSymbol;
-    private double    m_dPrice;
-    private int       m_iRank;
-    private Timestamp m_oTimestamp;
-    private String    m_oImageURL;
-    private String    m_oImageLocal;
-    private boolean   m_bLocalTime;
+    private String    m_oName       = "";
+    private String    m_oID         = "";
+    private String    m_oSymbol     = "";
+    private double    m_dPrice      = 0;
+    private int       m_iRank       = 0;
+    private Timestamp m_oTimestamp  = null;
+    private String    m_oImageURL   = null;
+    private String    m_oImageLocal = null;
+    private boolean   m_bLocalTime  = false;
 
     public CCoinInfo(String oRawData, Timestamp oTimestamp)
     {
@@ -38,6 +39,12 @@ public class CCoinInfo
 
             if ((iStart >= 0)&&(iStart < iEnd))
                 m_oName = oRawData.substring(iStart, iEnd);
+
+            iStart = oRawData.indexOf("id") + 5;
+            iEnd   = (iStart < 0)? 0 : oRawData.indexOf('"', iStart);
+
+            if ((iStart >= 0)&&(iStart < iEnd))
+                m_oID = oRawData.substring(iStart, iEnd);
 
             iStart = oRawData.indexOf("symbol") + 9;
             iEnd   = (iStart < 0)? 0 : oRawData.indexOf('"', iStart);
@@ -100,6 +107,7 @@ public class CCoinInfo
         }
     }
     public String    Name        () { return m_oName      ; }
+    public String    ID          () { return m_oID        ; }
     public String    Symbol      () { return m_oSymbol    ; }
     public double    Price       () { return m_dPrice     ; }
     public int       Rank        () { return m_iRank      ; }

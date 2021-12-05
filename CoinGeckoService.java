@@ -10,8 +10,6 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -37,7 +35,10 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
 
+import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
@@ -63,7 +64,10 @@ public class CoinGeckoService extends Service
     private Context                       m_oContext           = null;
     private PowerManager.WakeLock         m_oWakeLock          = null;
     private PowerManager                  m_oPowerManager      = null;
-    private static int                    FOREGROUND_ID        = 1338;
+    private final int                     FOREGROUND_ID        = 1338;
+    private boolean                       m_bDynamicExportList = true;
+    private int                           m_iEventLogSize      = 1024;
+    private boolean                       m_bEventLogRestart   = false;
 
     // Handler that receives messages from the thread
     private final class ServiceHandler extends Handler
@@ -77,6 +81,8 @@ public class CoinGeckoService extends Service
         {
             m_oHandleMessage = msg;
 
+            LogEvent("handleMessage(" + msg + ")");
+
             m_oStillRunningProc = new Thread()
             {
                 public void run()
@@ -89,14 +95,16 @@ public class CoinGeckoService extends Service
     }
     private void InfiniteProcees()
     {
+        LogEvent("Entering InfiniteProcess");
+
         while (!m_bExitFlag)
         {
-            long lStartTimeMs         = System.currentTimeMillis();
-            long lElapsedTimeMs       = 0L;
-            long lWakeLockTimeoutMSec = 10 * 60 * 1000L;
+            long    lStartTimeMs         = System.currentTimeMillis();
+            long    lElapsedTimeMs       = 0L;
+            long    lWakeLockTimeoutMSec = 10 * 60 * 1000L;
+            boolean bExceptionOccurred   = false;
 
            // AcquireWakeLock();
-
             for (String oWebPage : m_aoPages)
             {
                 if (!m_bExitFlag)
@@ -107,16 +115,19 @@ public class CoinGeckoService extends Service
                     }
                     catch (IOException e)
                     {
-                        e.printStackTrace();
+                        bExceptionOccurred = true;
+                        LogEvent("Exception " + e.getMessage());
                     }
                 }
             }
 
-            DownloadImages();
-            RefreshExportable();
-            LogAllCoins();
-            NotifyAppActivity();
-
+            if (!bExceptionOccurred)
+            {
+                DownloadImages();
+                RefreshExportable();
+                SaveAllCoins();
+                NotifyAppActivity();
+            }
             // ReleaseWakelock();
 
             lElapsedTimeMs = (System.currentTimeMillis() - lStartTimeMs);
@@ -131,6 +142,7 @@ public class CoinGeckoService extends Service
             //while (!m_bExitFlag && (lElapsedTimeMs < (m_iSnapshotPeriodSec * 1000)));
         }
 
+        LogEvent("Exiting InfiniteProcess");
         // Stop the service using the startId, so that we don't stop
         // the service in the middle of handling another job
         stopSelf(m_oHandleMessage.arg1);
@@ -143,7 +155,7 @@ public class CoinGeckoService extends Service
         try
         {
             Thread.sleep(iMSec);
-            bSuccess = false;
+            bSuccess = true;
         }
         catch (Exception oEx)
         {
@@ -160,9 +172,10 @@ public class CoinGeckoService extends Service
             Globals.wakelock = null;
         }
         m_oPowerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        assert m_oPowerManager != null;
         m_oWakeLock     =  m_oPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"CoinGeckoService:WakeLock");
 
-        m_oWakeLock.acquire();
+        m_oWakeLock.acquire(10*60*1000L /*10 minutes*/);
 
         Globals.wakelock = this.m_oWakeLock;
     }
@@ -170,6 +183,7 @@ public class CoinGeckoService extends Service
     {
         m_oWakeLock.release();
     }
+    @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     public void onCreate()
     {
@@ -191,7 +205,7 @@ public class CoinGeckoService extends Service
 
         for (int iIdx = 0; iIdx < iNbPage; iIdx++)
         {
-            m_aoPages[iIdx] = new String("https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=market_cap_desc&per_page=100&page=" + (iIdx + 1));
+            m_aoPages[iIdx] = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=market_cap_desc&per_page=100&page=" + (iIdx + 1);
         }
         m_oHandlerThread = new HandlerThread("ServiceStartArguments", Process.THREAD_PRIORITY_BACKGROUND);
         m_oHandlerThread.start();
@@ -230,23 +244,6 @@ public class CoinGeckoService extends Service
 
         return oBuild.build();
     }
-    //private Notification GetForgroundNotification()
-    //{
-    //    Intent               oNotifIntent   = new Intent(this, MainActivity.class);
-    //    PendingIntent        oPendingIntent = PendingIntent.getActivity(this, 0, oNotifIntent, 0);
-    //    Bitmap               oIcon          = BitmapFactory.decodeResource(getBaseContext().getResources(), android.R.drawable.star_on);
-    //    Notification.Builder oBuild         = new Notification.Builder(this);
-//
-    //    oBuild.setContentTitle("CoinGeckoService Title")
-    //            .setTicker("CoinGeckoService Ticker")
-    //            .setSmallIcon(android.R.drawable.star_on)
-    //            .setLargeIcon(Bitmap.createScaledBitmap(oIcon, 128, 128, false))
-    //            .setContentIntent(oPendingIntent)
-    //            .setPriority(Notification.PRIORITY_LOW)
-    //            .setOngoing(true);
-//
-    //    return oBuild.build();
-    //}
     @Override
     public int onStartCommand(Intent intent, int flags, int startId)
     {
@@ -314,6 +311,9 @@ public class CoinGeckoService extends Service
         Intent intent = new Intent("Event.NewDataFromCoinGeckoService");
         // You can also include some extra data.
         intent.putExtra("ServiceMessage", "Notify.NewDataFromCoinGeckoService");
+
+        LogEvent("Notify.NewDataFromCoinGeckoService");
+
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
     private void GetCoinSnapshot(URL oURL) throws MalformedURLException, IOException
@@ -362,8 +362,7 @@ public class CoinGeckoService extends Service
         CCoinItem         oOut       = null;
         String            oWebPart1  = "https://api.coingecko.com/api/v3/coins/";
         String            oWebPart2  = "/market_chart?vs_currency=cad&days=1";
-        String            oCoinName  = oCoin.Name().toLowerCase().replace(" ", "%20");
-        String            oWeb       = String.join("", oWebPart1, oCoinName, oWebPart2);
+        String            oWeb       = String.join("", oWebPart1, oCoin.ID(), oWebPart2);
         URL               oURL       = new URL(oWeb);
         InputStream       oIS        = oURL.openStream();
         InputStreamReader oSRd       = new InputStreamReader(oIS);
@@ -424,14 +423,14 @@ public class CoinGeckoService extends Service
 
                     if (aoCouple.length == 2)
                     {
-                        long      lTimeMSec = Long.parseLong(aoCouple[0]);
-                        Timestamp oLocal    = new Timestamp(lTimeMSec);
-                        double    dPrice    = Double.parseDouble(aoCouple[1]);
+                        long      lTimeMSec  = Long.parseLong(aoCouple[0]);
+                        Timestamp oTimeStamp = new Timestamp(lTimeMSec);
+                        double    dPrice     = Double.parseDouble(aoCouple[1]);
 
                         if (oOut == null)
-                            oOut = new CCoinItem(oCoin.Name(), oCoin.Symbol(), oCoin.Rank(), dPrice, oLocal, true, oCoin.ImgPath());
+                            oOut = new CCoinItem(oCoin.Name(), oCoin.Symbol(), oCoin.Rank(), dPrice, oTimeStamp, true, oCoin.ImgPath());
                         else
-                            oOut.NewValue(dPrice, oLocal);
+                            oOut.NewValue(dPrice, oTimeStamp);
                     }
                 }
             }
@@ -446,15 +445,18 @@ public class CoinGeckoService extends Service
         {
             if (m_oCoinExportList == null)
             {
-                int iNbHistory = 0;
+                int iNbHistory      = 0;
+                int iLocalDataCount = 0;
 
                 m_oCoinExportList = new ArrayList<>();
+
+                LogEvent("Creating Export List");
 
                 for (CCoinInfo oInfo : m_oCoinSnapshotList)
                 {
                     CCoinItem oItemFromChart = null;
                     // m_oCoinExportList.add(new CCoinItem(oInfo));
-                    if (iNbHistory < 10) // Market charts take some time
+                    if (iNbHistory < 20) // Limit because Market charts take some time
                     {
                         try
                         {
@@ -467,16 +469,36 @@ public class CoinGeckoService extends Service
                         }
                         catch (IOException e)
                         { // Market chart wasn't available
+                            LogEvent("Exception: Market chart for " + oInfo.Name() + " not available");
                         }
                     }
                     if (oItemFromChart == null)
-                        m_oCoinExportList.add(new CCoinItem(oInfo));
+                    {
+                        CCoinItem oItemFromFile = GetLocalHistory(oInfo);
+
+                        if (oItemFromFile != null)
+                        {
+                            oItemFromFile.NewValue(oInfo.Price(), oInfo.TimeStamp());
+
+                            m_oCoinExportList.add(oItemFromFile);
+
+                            iLocalDataCount++;
+                        }
+                        else
+                            m_oCoinExportList.add(new CCoinItem(oInfo));
+                    }
                 }
+                LogEvent("Got Local Data for " + iLocalDataCount + " Coins");
             }
             else
             {
+                LogEvent("Updating Export List");
+
                 for (CCoinInfo oInfo : m_oCoinSnapshotList)
                 {
+                    boolean bFound   = false;
+                    boolean bRankChg = false;
+
                     for (CCoinItem oItem : m_oCoinExportList)
                     {
                         if (oInfo.Name().equals(oItem.Name))
@@ -489,9 +511,41 @@ public class CoinGeckoService extends Service
                                     oItem.ClearOneShotAlert();
                                 }
                             }
+                            bFound = true;
+                            if ((oInfo.Rank() != oItem.rank)&& m_bDynamicExportList)
+                                oItem.NewRank(oInfo.Rank());
                             break;
                         }
                     }
+                    if (!bFound && m_bDynamicExportList)
+                    {
+                        m_oCoinExportList.add(new CCoinItem(oInfo));
+                        LogEvent("Added " + oInfo.Name() + " to List");
+                    }
+                }
+                if (m_bDynamicExportList)
+                {
+                    ArrayList<CCoinItem> oToRemove = new ArrayList<>();
+
+                    for (CCoinItem oItem : m_oCoinExportList)
+                    {
+                        boolean bFound = false;
+                        for (CCoinInfo oInfo : m_oCoinSnapshotList)
+                        {
+                            if (oInfo.Name().equals(oItem.Name))
+                            {
+                                bFound = true;
+                                break;
+                            }
+                        }
+                        if (!bFound && !oItem.AlertEnabled && !oItem.Favorite)
+                        {
+                            oToRemove.add(oItem);
+                            LogEvent("Removing " + oItem.Name + " from List");
+                        }
+                    }
+                    if (oToRemove.size() > 0)
+                        m_oCoinExportList.removeAll(oToRemove);
                 }
             }
         }
@@ -506,6 +560,7 @@ public class CoinGeckoService extends Service
             if (!oDir.mkdir())
                 return;
         }
+        int iCount = 0;
         for (CCoinInfo oInfo : m_oCoinSnapshotList)
         {
             String oURL           = oInfo.ImgURL();
@@ -514,10 +569,14 @@ public class CoinGeckoService extends Service
             File oFile = new File(oLocalFileneme);
 
             if (!oFile.exists())
+            {
                 DownloadFile(oURL, oLocalFileneme);
-
+                iCount++;
+            }
             oInfo.SetImgPath(oLocalFileneme);
         }
+        if (iCount > 0)
+            LogEvent("Downloaded " + iCount + " Coin images");
     }
     private boolean DownloadFile(String oURL, String oLocalPath)
     {
@@ -541,19 +600,116 @@ public class CoinGeckoService extends Service
         }
         catch (MalformedURLException mue)
         {
-            mue.printStackTrace();
+            LogEvent("Exception " + mue.getMessage());
         }
         catch (IOException ioe)
         {
-            ioe.printStackTrace();
+            LogEvent("Exception " + ioe.getMessage());
         }
         catch (SecurityException se)
         {
-            se.printStackTrace();
+            LogEvent("Exception " + se.getMessage());
         }
         return bSuccess;
     }
-    private void LogAllCoins()
+    private String BuildFilename(String oCoinName)
+    {
+        return m_oLogPath + "/" + oCoinName + ".log";
+    }
+    private boolean FileDataAvailable(CCoinInfo oCoin)
+    {
+        String oFilename       = BuildFilename(oCoin.Name());
+        File   oFile           = new File(oFilename);
+        long   lDiffMSec       = new Date().getTime() - oFile.lastModified();
+        long   lStillValidMSec = 60 * 60 * 1000;
+
+        return oFile.exists() && (lDiffMSec <= lStillValidMSec);
+    }
+    private boolean SaveCoinSamples(CCoinItem oCoin, BufferedWriter oBufWriter)
+    {
+        boolean                   bSuccess = true;
+        CCoinItem.CShortTermStats oStats   = oCoin.GetStats();
+
+        for (CCoinItem.CStatSample oSample : oStats.History)
+        {
+            try
+            {
+                oBufWriter.write(oSample.ToExport() + "\r\n");
+            }
+            catch (Exception ignored)
+            {
+                bSuccess = false;
+                break;
+            }
+        }
+        return bSuccess;
+    }
+    private void LogEvent(String oEventMsg)
+    {
+        if ((m_oLogPath == null)||(m_iEventLogSize == 0))
+            return;
+
+        File              oDir   = new File(m_oLogPath);
+        File              oFile  = new File(m_oLogPath + "/EventMsgs.log");
+        ArrayList<String> oLines = new ArrayList<>();
+
+        if (!oDir.exists())
+        {
+            if (!oDir.mkdir())
+                return;
+        }
+        try
+        {
+            if (!oFile.exists())
+            {
+                oFile.createNewFile();
+            }
+            else if (!m_bEventLogRestart)
+            {
+                FileReader     oFReader = new FileReader(oFile.getAbsoluteFile());
+                BufferedReader oBReader = new BufferedReader(oFReader);
+                String         oLine    = null;
+
+                while ((oLine = oBReader.readLine()) != null)
+                {
+                    oLines.add(oLine);
+                }
+                oBReader.close();
+                oFReader.close();
+            }
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+
+        m_bEventLogRestart = false;
+
+        Timestamp  oTimestamp = new Timestamp(System.currentTimeMillis());
+        String     oNewLine   = oTimestamp.toString() + ">>" + oEventMsg;
+
+        oLines.add(oNewLine);
+        while (oLines.size() > m_iEventLogSize)
+            oLines.remove(0);
+
+        try
+        {
+            FileWriter     oFWriter = new FileWriter(oFile.getAbsoluteFile());
+            BufferedWriter oBWriter = new BufferedWriter(oFWriter);
+
+            for (String oLine : oLines)
+            {
+                oBWriter.write(oLine + "\r\n");
+            }
+            oBWriter.close();
+            oFWriter.close();
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+    }
+    private void SaveAllCoins()
     {
         if (m_oCoinExportList != null)
         {
@@ -566,61 +722,77 @@ public class CoinGeckoService extends Service
                 if (!oDir.mkdir())
                     return;
             }
+            int iCount = 0;
             for (CCoinItem oCoin : m_oCoinExportList)
             {
-                String oFilename = m_oLogPath + "/" + oCoin.Name + ".log";
+                String oFilename = BuildFilename(oCoin.Name);
 
                 try
                 {
-                    File                      oFile   = new File(oFilename);
-                    boolean                   bAppend = true;
-                    CCoinItem.CShortTermStats oStats  = oCoin.GetStats();
-                    boolean                   bProcess = (oStats != null)&& oStats.StatAvailable();
+                    File oFile = new File(oFilename);
 
                     if (!oFile.exists())
                         oFile.createNewFile();
-                    else if (bProcess)
-                    {
-                        FileReader     oFReader   = new FileReader(oFile.getAbsoluteFile());
-                        BufferedReader oBReader   = new BufferedReader(oFReader);
-                        String         oFirstLine = oBReader.readLine();
-                        String         oLastLine  = oFirstLine;
-                        String         oNextLine  = null;
 
-                        bAppend = oFirstLine.contains(oStatKeyword) && oFirstLine.contains(oStats.Revison());
+                    FileWriter     oFWriter = new FileWriter(oFile.getAbsoluteFile(), false);
+                    BufferedWriter oBWriter = new BufferedWriter(oFWriter);
 
-                        while ((oNextLine = oBReader.readLine()) != null)
-                            oLastLine = oNextLine;
+                    SaveCoinSamples(oCoin, oBWriter);
 
-                        bProcess = oStats.NextPeriod(oLastLine);
-
-                        oBReader.close();
-                        oFReader.close();
-                    }
-                    if (bProcess)
-                    {
-                        FileWriter     oFWriter = new FileWriter(oFile.getAbsoluteFile(), bAppend);
-                        BufferedWriter oBWriter = new BufferedWriter(oFWriter);
-
-                        if (!bAppend)
-                        {
-                            oBWriter.write(oStatKeyword + oStats.Revison() + "\r\n");
-                            oBWriter.write(oCoinKeyword + oCoin.Name + "\r\n");
-                        }
-                        oBWriter.write(oStats.FormatStat() + "\r\n");
-                        oBWriter.close();
-                        oFWriter.close();
-                    }
+                    oBWriter.close();
+                    oFWriter.close();
+                    iCount++;
                 }
                 catch (IOException e)
                 {
-                    e.printStackTrace();
+                    LogEvent("Exception " + e.getMessage());
                 }
             }
+            LogEvent("Saved " + iCount + " Coins");
         }
+    }
+    private CCoinItem GetLocalHistory(CCoinInfo oCoin)
+    {
+        CCoinItem oOut = null;
+
+        if (FileDataAvailable(oCoin))
+        {
+            try
+            {
+                String         oFilename = BuildFilename(oCoin.Name());
+                File           oFile     = new File(oFilename);
+                FileReader     oFReader  = new FileReader(oFile.getAbsoluteFile());
+                BufferedReader oBReader  = new BufferedReader(oFReader);
+                String         oLine     = null;
+
+                while ((oLine = oBReader.readLine()) != null)
+                {
+                    CCoinItem.CStatSample oSample = CCoinItem.CreateSample(oLine);
+                    if (oSample != null)
+                    {
+                        double    dPrice     = oSample.Price;
+                        Timestamp oTimeStamp = oSample.Time;
+
+                        if (oOut == null)
+                            oOut = new CCoinItem(oCoin.Name(), oCoin.Symbol(), oCoin.Rank(), dPrice, oTimeStamp, true, oCoin.ImgPath());
+                        else
+                            oOut.NewValue(dPrice, oTimeStamp);
+                    }
+                }
+                oBReader.close();
+                oFReader.close();
+            }
+            catch (IOException e)
+            {
+                e.printStackTrace();
+            }
+        }
+        return oOut;
     }
     public ArrayList<CCoinItem> GetCoinList()
     {
+        LogEvent("GetCoinList called");
+
         while (m_oCoinExportList == null)
         {
             try
@@ -668,6 +840,8 @@ public class CoinGeckoService extends Service
             oTitle   = oInAlert.AlertTitle;
             oMessage = oInAlert.AlertMessage;
         }
+        LogEvent("Sending Notification " + oMessage);
+
         SendNotification(oChannelToUse, oTitle, oMessage);
     }
     private void CreateNotificationChannel(String oChannelName, String oDescrip, int iImportance)

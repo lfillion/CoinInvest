@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -38,6 +39,7 @@ public class SecondFragment extends Fragment {
     public static String         TAG                = "GraphFragment";
     private IHostActivityOptions mHostOptions       = null;
     private Button               mBackButton        = null;
+    private CheckBox             mFavoriteCheckBox  = null;
     private ImageView            mGraphicArea       = null;
     private ImageView            mLogoImgView       = null;
     private TextView             mRankTextView      = null;
@@ -52,6 +54,9 @@ public class SecondFragment extends Fragment {
     private Switch               mPriceAlertSwitch  = null;
     private EditText             mAlertEditText     = null;
     private Button               mAlertAcceptButton = null;
+    private Button               mAlertUnitButton   = null;
+    private TextView             mRawDataTextView   = null;
+    private boolean              mSettingItself     = false;
 
     public SecondFragment(IHostActivityOptions oHostOptions)
     {
@@ -72,6 +77,7 @@ public class SecondFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
 
         mBackButton        = (Button   ) getView().findViewById(R.id.id_BackViewButton);
+        mFavoriteCheckBox  = (CheckBox ) getView().findViewById(R.id.id_FavoriteCheckBox);
         mGraphicArea       = (ImageView) getView().findViewById(R.id.id_ImageView);
         mLogoImgView       = (ImageView) getView().findViewById(R.id.id_2ndLogo);
         mRankTextView      = (TextView ) getView().findViewById(R.id.id_2ndCoinRank);
@@ -84,7 +90,9 @@ public class SecondFragment extends Fragment {
         mAnalysisImgView   = (ImageView) getView().findViewById(R.id.id_AnalysisImageView);
         mPriceAlertSwitch  = (Switch   ) getView().findViewById(R.id.id_PriceAlertSwitch);
         mAlertEditText     = (EditText ) getView().findViewById(R.id.id_AlertTriggerPercent);
+        mAlertUnitButton   = (Button   ) getView().findViewById(R.id.id_UnitButton);
         mAlertAcceptButton = (Button   ) getView().findViewById(R.id.id_AcceptButton);
+        mRawDataTextView   = (TextView ) getView().findViewById(R.id.id_RawData);
 
         if (mCoinItem != null)
         {
@@ -113,6 +121,22 @@ public class SecondFragment extends Fragment {
             }
         });
 
+        mFavoriteCheckBox.setOnClickListener(new View.OnClickListener()
+        {
+           @Override
+           public  void onClick(View view)
+           {
+               if (!mSettingItself)
+               {
+                   boolean bChecked = ((CheckBox) view).isChecked();
+
+                   mCoinItem.Favorite = bChecked;
+
+                   mHostOptions.SaveCoinConfig(mCoinItem);
+               }
+           }
+        });
+
         mPriceAlertSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener()
         {
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked)
@@ -121,23 +145,57 @@ public class SecondFragment extends Fragment {
 
                 mAlertEditText.setEnabled(bEnable);
                 mAlertAcceptButton.setEnabled(bEnable);
+                mAlertUnitButton.setEnabled(bEnable);
                 mAlertAcceptButton.setTextColor(Color.WHITE);
             }
         });
 
+        mAlertUnitButton.setOnClickListener(new View.OnClickListener()
+        {
+            @Override
+            public  void onClick(View view1)
+            {
+                String oUnit = mAlertUnitButton.getText().toString();
+
+                if (oUnit.contains("~%"))
+                    mAlertUnitButton.setText(" $");
+                else if (oUnit.contains("$"))
+                    mAlertUnitButton.setText(" %");
+                else // Assume (oUnit.contains("%"))
+                    mAlertUnitButton.setText("~%");
+            }
+        });
         mAlertAcceptButton.setOnClickListener(new View.OnClickListener()
         {
             @Override
             public void onClick(View view1)
             {
-                mAlertAcceptButton.setTextColor(Color.GREEN);
-
-                String oValue = mAlertEditText.getText().toString();
-                double dValue = Double.parseDouble(oValue);
-
-                if (mCoinItem != null)
+                boolean bAccepted = false;
+                String  oValue    = mAlertEditText.getText().toString();
+                try
                 {
-                    mCoinItem.SetAlertPercent(dValue);
+                    double dValue = Double.parseDouble(oValue);
+
+                    if (mCoinItem != null)
+                    {
+                        String oUnit = mAlertUnitButton.getText().toString();
+
+                        if (oUnit.contains("~%"))
+                            mCoinItem.SetAlertPercentRelative(dValue, mCoinItem.value);
+                        else if (oUnit.contains("%"))
+                            mCoinItem.SetAlertPercent(dValue, mCoinItem.value);
+                        else
+                            mCoinItem.SetAlertDollar(dValue);
+                        bAccepted = true;
+                    }
+                }
+                catch (Exception oEx)
+                {
+                }
+                if (bAccepted)
+                {
+                    mAlertAcceptButton.setBackgroundColor(Color.GREEN);
+                    mHostOptions.SaveCoinConfig(mCoinItem);
                 }
             }
         });
@@ -163,20 +221,55 @@ public class SecondFragment extends Fragment {
         mSwingTextView.setText(oSwingValue);
 
         DrawAnalysisData(mCoinItem);
+
+        CCoinItem.CShortTermStats oStat = mCoinItem.GetStats();
+
+        mRawDataTextView.append("\r\n");
+        int iIdx = 0;
+        for (CCoinItem.CStatSample oSample : oStat.History)
+        {
+            String oIndex = String.format("[%02d] ", iIdx);
+
+            mRawDataTextView.append(oIndex + oSample.ToString() + "\r\n");
+            iIdx++;
+        }
     }
     @Override
     public void onResume()
     {
+        mSettingItself = true;
+
         super.onResume();
 
         mPriceAlertSwitch.setChecked(false);
         mAlertAcceptButton.setTextColor(Color.WHITE);
         mAlertAcceptButton.setEnabled(false);
+
+        mFavoriteCheckBox.setChecked(mCoinItem.Favorite);
+
         if ((mCoinItem == null)|| !mCoinItem.AlertEnabled)
             mAlertEditText.getText().clear();
         else
-            mAlertEditText.setText(String.format("%3.2f", mCoinItem.AlertPercent));
+        {
+            if (mCoinItem.AlertUnit == CCoinItem.AlertUnits.Dollar)
+            {
+                mAlertEditText.setText(String.format("%3.2f", mCoinItem.AlertDollar));
+                mAlertUnitButton.setText(" $");
+            }
+            else
+            {
+                mAlertEditText.setText(String.format("%3.2f", mCoinItem.AlertPercent));
+
+                if (mCoinItem.AlertUnit == CCoinItem.AlertUnits.PercentRelative)
+                    mAlertUnitButton.setText("~%");
+                else
+                    mAlertUnitButton.setText(" %");
+            }
+
+        }
         mAlertEditText.setEnabled(false);
+
+        mSettingItself = false;
     }
     public void SetCoinItem(CCoinItem oToShow)
     {

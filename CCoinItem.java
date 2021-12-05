@@ -1,5 +1,6 @@
 package com.example.coininverst;
 
+import android.os.Build;
 import android.widget.ImageView;
 
 import java.sql.Timestamp;
@@ -11,15 +12,21 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 
+import androidx.annotation.RequiresApi;
+
 import static java.time.ZoneOffset.UTC;
 
 public class CCoinItem
 {
+    public enum AlertUnits { Dollar, Percent, PercentRelative }
+
     public  String          Name;
     public  String          Symbol;
     public  String          Rank;
     public  String          Value;
     public  Timestamp       Time ;
+    public  AlertUnits      AlertUnit;
+    public  double          AlertDollar;
     private CShortTermStats Stats;
     public  double          value;
     public  int             rank ;
@@ -31,9 +38,10 @@ public class CCoinItem
     public  String          AlertMessage;
     public  boolean         AlertEnabled;
     public  double          AlertPercent;
+    public  boolean         Favorite;
 
     private double  m_dAlertReference;
-    private boolean m_bAlertRefIncrease;
+    private boolean m_bAlertFloatingRef;
 
     public CCoinItem (CCoinInfo oCoinInfo)
     {
@@ -47,35 +55,51 @@ public class CCoinItem
         this.LocalTime = oCoinInfo.IsLocalTime();
         this.ImgPath   = oCoinInfo.ImgPath();
         this.Stats     = new CShortTermStats();
+        this.Favorite  = false;
 
         ResetAlert();
     }
     public CCoinItem (String name, String symbol, int iRank, double dValue, Timestamp oTime, boolean bLocalTime, String oLogo)
     {
-        this.Name        = name;
-        this.Symbol      = symbol;
-        this.value       = dValue;
-        this.rank        = iRank;
-        this.Rank        = String.format("%d", iRank);
-        this.Value       = ValToString(dValue);
-        this.Time        = oTime;
-        this.LocalTime   = bLocalTime;
-        this.ImgPath     = oLogo;
-        this.Stats       = new CShortTermStats();
+        this.Name      = name;
+        this.Symbol    = symbol;
+        this.value     = dValue;
+        this.rank      = iRank;
+        this.Rank      = String.format("%d", iRank);
+        this.Value     = ValToString(dValue);
+        this.Time      = oTime;
+        this.LocalTime = bLocalTime;
+        this.ImgPath   = oLogo;
+        this.Stats     = new CShortTermStats();
+        this.Favorite  = false;
 
         ResetAlert();
+    }
+    public CCoinItem CloneItself()
+    {
+        return new CCoinItem(Name, Symbol, rank, value, Time, LocalTime, ImgPath);
     }
     private void ResetAlert()
     {
         AlertPercent        = 0;
+        AlertDollar         = 0;
+        AlertUnit           = AlertUnits.Percent;
         m_dAlertReference   = 0;
-        m_bAlertRefIncrease = false;
+        m_bAlertFloatingRef = false;
         AlertEnabled        = false;
         AlertTriggered      = false;
         AlertTitle          = null;
         AlertMessage        = null;
     }
-
+    private void AlertDisable()
+    {
+        AlertEnabled = false;
+    }
+    public void NewRank(int iRank)
+    {
+        this.rank = iRank;
+        this.Rank = String.format("%d", iRank);
+    }
     static String ValToString(double dValue)
     {
         return (dValue < 1.0)? String.format("%.4f", dValue) : String.format("%.2f", dValue);
@@ -121,10 +145,18 @@ public class CCoinItem
             this.value = dValue;
             this.Value = ValToString(dValue);
 
-            if (AlertEnabled && m_bAlertRefIncrease)
+            if (AlertEnabled && m_bAlertFloatingRef)
             {
-                if (dValue > m_dAlertReference)
-                    m_dAlertReference = dValue;
+                if (AlertPercent < 0)
+                {
+                    if (dValue > m_dAlertReference)
+                        m_dAlertReference = dValue;
+                }
+                else
+                {
+                    if (dValue < m_dAlertReference)
+                        m_dAlertReference = dValue;
+                }
             }
             bSpecialEvent = CheckAlert();
         }
@@ -146,6 +178,28 @@ public class CCoinItem
     {
         return new CStatSample(this.Time, this.value);
     }
+
+    public static CStatSample CreateSample(String oToImport)
+    {
+        CStatSample oOut    = null;
+        String[]    aoSplit = oToImport.split("#");
+
+        if (aoSplit.length == 2)
+        {
+            try
+            {
+                long   lTime  = Long.parseLong(aoSplit[0]);
+                double dPrice = Double.parseDouble(aoSplit[1]);
+
+                oOut = new CCoinItem.CStatSample(new Timestamp(lTime), dPrice);
+            }
+            catch (Exception ignored)
+            {
+            }
+        }
+        return oOut;
+    }
+
     private boolean CheckAlert()
     {
         boolean bEvent = false;
@@ -155,48 +209,163 @@ public class CCoinItem
             if (m_dAlertReference > 0)
             {
                 double dDiffPercent = 100.0 * (this.value - m_dAlertReference) / m_dAlertReference;
+                String oVerbe       = "";
 
                 if (AlertPercent < 0)
                 {
                     AlertTriggered = dDiffPercent < AlertPercent;
+                    oVerbe         = "drop to";
                 }
                 else
                 {
                     AlertTriggered = dDiffPercent > AlertPercent;
+                    oVerbe         = "rise to";
                 }
                 if (AlertTriggered)
-                    AlertMessage = Name + " Price is now $" + this.Value;
+                    AlertMessage = Name + " Price " + oVerbe + " $" + this.Value;
             }
             bEvent = AlertTriggered;
         }
         return bEvent;
     }
-    public void SetAlertPercent(double dAlertPercent)
+    public boolean SetAlertPercent(double dAlertPercent, double dFromValue)
     {
-        if (dAlertPercent < 0)
-        {
-            m_dAlertReference   = value;
-            m_bAlertRefIncrease = true;
-            AlertPercent        = dAlertPercent;
-            AlertEnabled        = m_dAlertReference > 0;
-            AlertTitle          = "Drop Price Alert!";
-        }
-        else if (dAlertPercent > 0)
-        {
-            m_dAlertReference   = value;
-            m_bAlertRefIncrease = false;
-            AlertPercent        = dAlertPercent;
-            AlertEnabled        = m_dAlertReference > 0;
-            AlertTitle          = "Up Price Alert!";
-        }
+        if (dAlertPercent == 0)
+            ResetAlert();
         else
         {
+            m_dAlertReference   = dFromValue;
+            m_bAlertFloatingRef = false;
+            AlertPercent        = dAlertPercent;
+            AlertDollar         = 0;
+            AlertUnit           = AlertUnits.Percent;
+            AlertEnabled        = m_dAlertReference > 0;
+            AlertTitle          = (dAlertPercent < 0)? "Drop Price Alert!" : "Up Price Alert!";
+        }
+        return AlertEnabled;
+    }
+    public void SetAlertPercentRelative(double dAlertPercent, double dFromValue)
+    {
+        if (SetAlertPercent(dAlertPercent, dFromValue))
+        {
+            m_bAlertFloatingRef = true;
+            AlertUnit           = AlertUnits.PercentRelative;
+        }
+    }
+    public void SetAlertDollar(double dAlertDollar)
+    {
+        if (dAlertDollar == 0)
             ResetAlert();
+        else if (SetAlertPercent(((dAlertDollar - value)/value) * 100.0, value))
+        {
+            AlertUnit   = AlertUnits.Dollar;
+            AlertDollar = dAlertDollar;
+        }
+    }
+    public String FavoriteToString()
+    {
+        String oSep = "#";
+
+        return "Favorite" + oSep + Name + oSep + (Favorite? "Yes" : "No");
+    }
+    public void SetFavorite(String oInLine)
+    {
+        if (oInLine.contains("Favorite") && oInLine.contains(Name))
+        {
+            String   oSep    = "#";
+            String[] aoSplit = oInLine.split(oSep);
+
+            if (aoSplit.length >= 3)
+                Favorite = aoSplit[2].equals("Yes");
+        }
+    }
+    public String AlertToString()
+    {
+        String oSep = "#";
+        String oOut = "Alert" + oSep + Name + oSep;
+
+        if (AlertEnabled == false)
+            oOut += "Disable";
+        else if (AlertUnit == AlertUnits.Dollar)
+            oOut += "Enable" + oSep + String.format("%6.10f", AlertDollar) + oSep + "$";
+        else if (AlertUnit == AlertUnits.Percent)
+            oOut += "Enable" + oSep + String.format("%2.5f(%f)", AlertPercent, m_dAlertReference) + oSep + "%";
+        else if (AlertUnit == AlertUnits.PercentRelative)
+            oOut += "Enable" + oSep + String.format("%2.5f(%f)", AlertPercent, m_dAlertReference) + oSep + "~%";
+        else
+            oOut += "ERROR:Unknown state!";
+
+        return oOut;
+    }
+    public boolean EvaluateAlert(String oInLine)
+    {
+        boolean bUpdate = false;
+
+        if (AlertTriggered)
+        {
+            if (!AlertEnabled)
+                ResetAlert();
+        }
+        else if (AlertEnabled)
+        {
+            if ((AlertUnit == AlertUnits.Dollar)||(AlertUnit == AlertUnits.Percent))
+                bUpdate = true;
+            else
+            {
+                CCoinItem oClone = CloneItself();
+
+                oClone.SetAlert(oInLine);
+
+                if ((oClone.AlertUnit == AlertUnits.Dollar) || (oClone.AlertUnit == AlertUnits.Percent))
+                    bUpdate = true;
+                else if (oClone.AlertPercent != AlertPercent)
+                    bUpdate = true;
+                else if (AlertPercent > 0)
+                    bUpdate = m_dAlertReference > oClone.m_dAlertReference;
+                else // Assume (AlertPercent < 0)
+                    bUpdate = m_dAlertReference < oClone.m_dAlertReference;
+            }
+        }
+        else
+            bUpdate = true;
+
+        return bUpdate;
+    }
+    public void SetAlert(String oInLine)
+    {
+        if (oInLine.contains("Alert") && oInLine.contains(Name))
+        {
+            String   oSep    = "#";
+            String[] aoSplit = oInLine.split(oSep);
+
+            if (aoSplit.length >= 3)
+            {
+                ResetAlert();
+
+                if (aoSplit[2].equals("Enable") && (aoSplit.length >= 5))
+                {
+                    String oPercent = aoSplit[3].substring(0, aoSplit[3].indexOf('('));
+                    String oRefer   = aoSplit[3].substring(aoSplit[3].indexOf('(') + 1, aoSplit[3].indexOf(')'));
+                    double dValue   = Double.parseDouble(oPercent);
+                    double dRefer   = Double.parseDouble(oRefer);
+
+                    if (aoSplit[4].equals("~%"))
+                    {
+                        if (!AlertEnabled || (AlertUnit != AlertUnits.PercentRelative))
+                            SetAlertPercentRelative(dValue, dRefer);
+                        //else, already in alert mode (avoid to change its value).
+                    }
+                    else if (aoSplit[4].equals("%"))
+                        SetAlertPercent(dValue, dRefer);
+                    else if (aoSplit[4].equals("$"))
+                        SetAlertDollar(dValue);
+                }
+            }
         }
     }
     public void ClearOneShotAlert()
     {
-        ResetAlert();
+        AlertDisable();
     }
     class CShortTermStats
     {
@@ -497,7 +666,7 @@ public class CCoinItem
             }
         }
     }
-    public class CStatSample
+    public static class CStatSample
     {
         public double    Price;
         public Timestamp Time ;
@@ -507,9 +676,22 @@ public class CCoinItem
             Time  = oTime;
             Price = dPrice;
         }
+        @RequiresApi(api = Build.VERSION_CODES.O)
         public String ToString()
         {
-            return String.join(",", Time.toString(), String.valueOf(Price));
+            String oTime  = Time.toString();
+            String oPrice = (Price >= 100)? String.format("%6.2f", Price)
+                                          : String.format("%2.6f", Price);
+
+            oTime = oTime.substring(0, oTime.indexOf('.'));
+
+            return String.join(" -- ", oTime, oPrice);
+        }
+        public String ToExport()
+        {
+            long lTime = Time.getTime();
+
+            return String.format("%d#%f", lTime, Price);
         }
     }
     public class CLinearAmplifier
