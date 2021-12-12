@@ -505,7 +505,7 @@ public class CoinGeckoService extends Service
                         {
                             if (oItem.NewValue(oInfo.Price(), oInfo.TimeStamp()));
                             {
-                                if (oItem.AlertTriggered)
+                                if (oItem.AlertEnabled && oItem.AlertTriggered)
                                 {
                                     NotifyAlert(oItem);
                                     oItem.ClearOneShotAlert();
@@ -812,6 +812,7 @@ public class CoinGeckoService extends Service
     {
         NotifyAlert(null);
     }
+
     private void NotifyAlert(CCoinItem oInAlert) //Set oInAlert = null to test an alert
     {
         String oChannelToUse = null;

@@ -240,7 +240,7 @@ public class CCoinItem
             AlertDollar         = 0;
             AlertUnit           = AlertUnits.Percent;
             AlertEnabled        = m_dAlertReference > 0;
-            AlertTitle          = (dAlertPercent < 0)? "Drop Price Alert!" : "Up Price Alert!";
+            AlertTitle          =  Name + ": "+ ((dAlertPercent < 0)? "Drop Price Alert!" : "Up Price Alert!");
         }
         return AlertEnabled;
     }
@@ -308,17 +308,17 @@ public class CCoinItem
         }
         else if (AlertEnabled)
         {
-            if ((AlertUnit == AlertUnits.Dollar)||(AlertUnit == AlertUnits.Percent))
-                bUpdate = true;
+            CCoinItem oClone = CloneItself();
+
+            oClone.SetAlert(oInLine);
+
+            if (AlertUnit == AlertUnits.Dollar)
+            {
+                bUpdate =  oClone.AlertDollar != AlertDollar;
+            }
             else
             {
-                CCoinItem oClone = CloneItself();
-
-                oClone.SetAlert(oInLine);
-
-                if ((oClone.AlertUnit == AlertUnits.Dollar) || (oClone.AlertUnit == AlertUnits.Percent))
-                    bUpdate = true;
-                else if (oClone.AlertPercent != AlertPercent)
+                if (oClone.AlertPercent != AlertPercent)
                     bUpdate = true;
                 else if (AlertPercent > 0)
                     bUpdate = m_dAlertReference > oClone.m_dAlertReference;
@@ -344,10 +344,11 @@ public class CCoinItem
 
                 if (aoSplit[2].equals("Enable") && (aoSplit.length >= 5))
                 {
-                    String oPercent = aoSplit[3].substring(0, aoSplit[3].indexOf('('));
-                    String oRefer   = aoSplit[3].substring(aoSplit[3].indexOf('(') + 1, aoSplit[3].indexOf(')'));
-                    double dValue   = Double.parseDouble(oPercent);
-                    double dRefer   = Double.parseDouble(oRefer);
+                    boolean bPercent = aoSplit[4].contains("%");
+                    String  oValue   = bPercent ? aoSplit[3].substring(0, aoSplit[3].indexOf('(')) : aoSplit[3];
+                    String  oRefer   = bPercent ? aoSplit[3].substring(aoSplit[3].indexOf('(') + 1, aoSplit[3].indexOf(')')) : null;
+                    double  dValue   = Double.parseDouble(oValue);
+                    double  dRefer   = bPercent ? Double.parseDouble(oRefer) : 0;
 
                     if (aoSplit[4].equals("~%"))
                     {
